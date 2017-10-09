@@ -14,6 +14,7 @@ using namespace std::chrono;
 using namespace std::experimental;
 
 
+const int FRAMES_PER_BUFFER = 256;
 
 
 
@@ -63,30 +64,32 @@ Listener::~Listener(){
 }
 
 
-const int FRAMES_PER_BUFFER = 256;
-const int TABLE_SIZE = 256;
 
 
 
 
 class AudioOutputCallbackContext {
 public:
-    float sine[TABLE_SIZE];
-    double left_phase;
-    double right_phase;
+    PaStreamParameters outputParameters;
+    vector<float> sine;
+    double leftPhase;
+    double rightPhase;
     double adjustedVelocity;
     bool stereo;
     high_resolution_clock::time_point lastTime;
     double lastTimeSum;
     int lastTimeCtr;
     double sampleRate;
+    int framesPerBuffer;
 };
 
 class AudioInputCallbackContext {
 public:
+    PaStreamParameters inputParameters;
     RWQueue *lockFreeQueue;
     bool stereo;
     double sampleRate;
+    int framesPerBuffer;
 };
 
 
@@ -102,17 +105,18 @@ static int patestCallback( const void *inputBuffer, void *outputBuffer,
     float *out = (float*)outputBuffer;
     double adjustedVelocity = ctx->adjustedVelocity;
 
+    const int sinTableSize = ctx->sine.size();
     for(unsigned long i=0; i<framesPerBuffer; i++ )
     {
-        *out++ = ctx->sine[(int)(ctx->left_phase)];
-        *out++ = ctx->sine[(int)(ctx->right_phase)];
+        *out++ = ctx->sine[(int)(ctx->leftPhase)];
+        *out++ = ctx->sine[(int)(ctx->rightPhase)];
 
         // a funny chord
-        ctx->left_phase += (0.5 * (1 * adjustedVelocity) + 0.5 * (1.5 * adjustedVelocity));
-        ctx->right_phase += (0.5 * (1 * adjustedVelocity) + 0.5 * (2 * adjustedVelocity));
+        ctx->leftPhase += (0.5 * (1 * adjustedVelocity) + 0.5 * (1.5 * adjustedVelocity));
+        ctx->rightPhase += (0.5 * (1 * adjustedVelocity) + 0.5 * (2 * adjustedVelocity));
 
-        if( ctx->left_phase >= TABLE_SIZE ) ctx->left_phase -= TABLE_SIZE;
-        if( ctx->right_phase >= TABLE_SIZE ) ctx->right_phase -= TABLE_SIZE;
+        if( ctx->leftPhase >= sinTableSize ) ctx->leftPhase -= sinTableSize;
+        if( ctx->rightPhase >= sinTableSize ) ctx->rightPhase -= sinTableSize;
     }
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
     duration<double, std::milli> time_span = t1 - ctx->lastTime;
@@ -132,50 +136,25 @@ static int patestCallback( const void *inputBuffer, void *outputBuffer,
 }
 
 
-void Listener::playTwoSmallHighPitchSine(){
-    const int duration = 180;
 
-    PaStreamParameters outputParameters;
-    PaStream *stream;
-    PaError err;
-    AudioOutputCallbackContext data;
-
-    for(int i=0; i<TABLE_SIZE; i++ )
-    {
-        data.sine[i] = (float) 1.0 * sin( ((double)i/(double)TABLE_SIZE) * M_PI * 2. );
-    }
-    data.left_phase = data.right_phase = 0;
-
-    const PaDeviceInfo *selectedDevice = Pa_GetDeviceInfo( *this->m_outputDeviceIndex );
-
-    outputParameters.device = *this->m_outputDeviceIndex;
-    outputParameters.channelCount = selectedDevice->maxOutputChannels;
-    outputParameters.sampleFormat = paFloat32; /* 32 bit floating point output */
-    outputParameters.suggestedLatency = selectedDevice->defaultLowOutputLatency;
-    outputParameters.hostApiSpecificStreamInfo = NULL;
-    int sampleRate = (selectedDevice->defaultSampleRate == 16000) ? 48000 : selectedDevice->defaultSampleRate;
-    data.adjustedVelocity = 6 * 44100.0 / sampleRate;
-    data.stereo = (outputParameters.channelCount == 2);
-    cout << "data.adjustedVelocity = " << data.adjustedVelocity << endl;
-    data.lastTime = high_resolution_clock::now();
-    data.lastTimeSum = 0.0;
-    data.lastTimeCtr = 0;
-    data.sampleRate = sampleRate;
-
-    err = Pa_OpenStream(
+PaError Listener::openOutputStream(PaStream *&stream, AudioOutputCallbackContext &context){
+    PaError err = Pa_OpenStream(
               &stream,
               NULL, /* no input */
-              &outputParameters,
-              sampleRate,
-              FRAMES_PER_BUFFER,
+              &context.outputParameters,
+              context.sampleRate,
+              context.framesPerBuffer,
               paClipOff,      /* we won't output out of range samples so don't bother clipping them */
               patestCallback,
-              &data );
-    if( err != paNoError ) goto error;
+              &context );
+    return err;
+}
 
-    err = Pa_StartStream( stream );
-    if( err != paNoError ) goto error;
+int Listener::startStopStreamTwice(PaStream *stream) {
+    const int duration = 180;
 
+    PaError err = Pa_StartStream( stream );
+    if( err != paNoError ) goto error;
 
     Pa_Sleep( duration );
 
@@ -195,8 +174,44 @@ void Listener::playTwoSmallHighPitchSine(){
     err = Pa_CloseStream( stream );
     if( err != paNoError ) goto error;
 
-error: ;
+error:
+    return err;
 }
+
+
+
+AudioOutputCallbackContext Listener::createOutputContext(){
+    AudioOutputCallbackContext context;
+
+    const int sinTableSize = 256;
+
+    context.sine.resize(sinTableSize);
+    for(int i=0; i<sinTableSize; i++ )
+    {
+        context.sine[i] = (float) 1.0 * sin( ((double)i/(double)sinTableSize) * M_PI * 2. );
+    }
+    context.leftPhase = context.rightPhase = 0;
+
+    const PaDeviceInfo *selectedDevice = Pa_GetDeviceInfo( *this->m_outputDeviceIndex );
+
+    context.outputParameters.device = *this->m_outputDeviceIndex;
+    context.outputParameters.channelCount = selectedDevice->maxOutputChannels;
+    context.outputParameters.sampleFormat = paFloat32; /* 32 bit floating point output */
+    context.outputParameters.suggestedLatency = selectedDevice->defaultLowOutputLatency;
+    context.outputParameters.hostApiSpecificStreamInfo = NULL;
+    int sampleRate = (selectedDevice->defaultSampleRate == 16000) ? 48000 : selectedDevice->defaultSampleRate;
+    context.adjustedVelocity = 6 * 44100.0 / sampleRate;
+    context.stereo = (context.outputParameters.channelCount == 2);
+    cout << "context.adjustedVelocity = " << context.adjustedVelocity << endl;
+    context.lastTime = high_resolution_clock::now();
+    context.lastTimeSum = 0.0;
+    context.lastTimeCtr = 0;
+    context.sampleRate = sampleRate;
+    context.framesPerBuffer = FRAMES_PER_BUFFER;
+
+    return context;
+}
+
 
 
 
@@ -231,32 +246,32 @@ static int patestInputCallback( const void *inputBuffer, void *outputBuffer,
 }
 
 
-AudioInputCallbackContext Listener::createInputContextAndFillInputParameters(PaStreamParameters &inputParameters){
+AudioInputCallbackContext Listener::createInputContext(){
     AudioInputCallbackContext context;
 
     const PaDeviceInfo *selectedDevice = Pa_GetDeviceInfo( *this->m_inputDeviceIndex );
-    inputParameters.device = *this->m_inputDeviceIndex;
-    inputParameters.channelCount = selectedDevice->maxInputChannels;
-    inputParameters.sampleFormat = paFloat32;
-    inputParameters.suggestedLatency = selectedDevice->defaultLowOutputLatency;
-    inputParameters.hostApiSpecificStreamInfo = NULL;
+    context.inputParameters.device = *this->m_inputDeviceIndex;
+    context.inputParameters.channelCount = selectedDevice->maxInputChannels;
+    context.inputParameters.sampleFormat = paFloat32;
+    context.inputParameters.suggestedLatency = selectedDevice->defaultLowOutputLatency;
+    context.inputParameters.hostApiSpecificStreamInfo = NULL;
 
     context.lockFreeQueue = this->m_lockFreeQueue;
-    context.stereo = (inputParameters.channelCount == 2);
+    context.stereo = (context.inputParameters.channelCount == 2);
     context.sampleRate = 16000;     //selectedDevice->defaultSampleRate
+    context.framesPerBuffer = FRAMES_PER_BUFFER;
 
     return context;
 }
 
 PaError Listener::openInputStream(PaStream *&stream,
-                                  AudioInputCallbackContext &context,
-                                  PaStreamParameters &inputParameters){
+                                  AudioInputCallbackContext &context){
     return Pa_OpenStream(
               &stream,
-              &inputParameters,
+              &context.inputParameters,
               NULL,
               context.sampleRate,
-              FRAMES_PER_BUFFER,
+              context.framesPerBuffer,
               paClipOff,
               patestInputCallback,
               &context );
@@ -278,11 +293,17 @@ error:
 }
 
 
-void Listener::reallyListen(){
-    PaStreamParameters inputParameters;
+void Listener::playTwoSmallHighPitchSine(){
     PaStream *stream = nullptr;
-    AudioInputCallbackContext context = createInputContextAndFillInputParameters(inputParameters);
-    openInputStream(stream, context, inputParameters);
+    AudioOutputCallbackContext context = createOutputContext();
+    openOutputStream(stream, context);
+    startStopStreamTwice(stream);
+}
+
+void Listener::reallyListen(){
+    PaStream *stream = nullptr;
+    AudioInputCallbackContext context = createInputContext();
+    openInputStream(stream, context);
     startStopStream(stream);
 }
 

@@ -21,9 +21,12 @@ private:
     void displayDeviceInfo(const PaDeviceInfo *deviceInfo, int deviceIndex);
     void playTwoSmallHighPitchSine();
     void reallyListen();
-    AudioInputCallbackContext createInputContextAndFillInputParameters(PaStreamParameters &inputParameters);
-    PaError openInputStream(PaStream *&stream, AudioInputCallbackContext &context, PaStreamParameters &inputParameters);
+    AudioInputCallbackContext createInputContext();
+    AudioOutputCallbackContext createOutputContext();
+    PaError openInputStream(PaStream *&stream, AudioInputCallbackContext &context);
+    PaError openOutputStream(PaStream *&stream, AudioOutputCallbackContext &context);
     int startStopStream(PaStream *stream);
+    int startStopStreamTwice(PaStream *stream);
 
     std::experimental::optional< size_t > findPreferedDevice(
                                                      const std::string &deviceName,
