@@ -3,6 +3,8 @@
 #include <string.h>
 #include <math.h>
 #include <chrono>
+#include <unistd.h>
+
 
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -131,7 +133,7 @@ static int patestCallback( const void *inputBuffer, void *outputBuffer,
 
 
 void Listener::playTwoSmallHighPitchSine(){
-    const int waiterMilli = 80;
+    const int duration = 180;
 
     PaStreamParameters outputParameters;
     PaStream *stream;
@@ -175,17 +177,17 @@ void Listener::playTwoSmallHighPitchSine(){
     if( err != paNoError ) goto error;
 
 
-    Pa_Sleep( waiterMilli );
+    Pa_Sleep( duration );
 
     err = Pa_StopStream( stream );
     if( err != paNoError ) goto error;
 
-    Pa_Sleep( waiterMilli );
+    Pa_Sleep( duration );
 
     err = Pa_StartStream( stream );
     if( err != paNoError ) goto error;
 
-    Pa_Sleep( waiterMilli );
+    Pa_Sleep( duration );
 
     err = Pa_StopStream( stream );
     if( err != paNoError ) goto error;
@@ -264,7 +266,7 @@ int Listener::startStopStream(PaStream *stream) {
     PaError err = Pa_StartStream( stream );
     if( err != paNoError ) goto error;
 
-    Pa_Sleep( 10 * 1000 );
+    pause();
 
     err = Pa_StopStream( stream );
     if( err != paNoError ) goto error;
