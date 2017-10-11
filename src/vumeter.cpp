@@ -8,14 +8,9 @@
 #include "listener.hpp"
 #include "thedisplayer.hpp"
 
-
 using namespace std;
 
-
 const int RQ_QUEUE_INIT_SIZE = 100;
-
-
-
 
 void VuMeter::audioThreadFunction(){
     const string jabraSpeak510 = string("Jabra SPEAK 510 USB");
@@ -28,12 +23,9 @@ void VuMeter::guiThreadFunction(){
     TheDisplayer(&m_lockFreeQueue).readAndDisplay();
 }
 
-
 VuMeter::VuMeter() :
-    m_lockFreeQueue(RQ_QUEUE_INIT_SIZE)
-{
+    m_lockFreeQueue(RQ_QUEUE_INIT_SIZE){
 }
-
 
 void VuMeter::start(){
     thread audioThread = thread(&VuMeter::audioThreadFunction, this);

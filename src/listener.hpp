@@ -8,10 +8,10 @@ class AudioInputCallbackContext;
 
 class Listener {
 public:
-    Listener(RWQueue *lockFreeQueue,
-             bool listDevices,
-             const std::vector< std::string > &preferedInputDevices,
-             const std::vector< std::string > &preferedOutputDevices);
+    explicit Listener(RWQueue *lockFreeQueue,
+                      bool listDevices,
+                      const std::vector< std::string > &preferedInputDevices,
+                      const std::vector< std::string > &preferedOutputDevices);
     ~Listener();
     void listenAndWrite();
 private:

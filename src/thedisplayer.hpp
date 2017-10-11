@@ -1,18 +1,34 @@
 #include "rwqueuetype.hpp"
 #include <SDL.h>
+#include <memory>
+
+using SDLWindowDestroyerType = void (*)(SDL_Window*);
+using SDLRendererDestroyerType = void (*)(SDL_Renderer*);
+using SDLTextureDestroyerType = void (*)(SDL_Texture*);
+
+
+// Singleton that takes care of C-style resource : SDL_Init SDL_Quit
+class SDLResource {
+public:
+    ~SDLResource();
+    static SDLResource *getInstance();
+private:
+    static SDLResource *m_instance;
+    SDLResource();
+};
+
 
 class TheDisplayer {
 public:
-    TheDisplayer(RWQueue *lockFreeQueue);
+    explicit TheDisplayer(RWQueue *lockFreeQueue);
     ~TheDisplayer();
     void readAndDisplay();
 private:
+    TheDisplayer(const TheDisplayer &);
     RWQueue *m_lockFreeQueue;
-    SDL_Window* m_window;
-    SDL_Renderer* m_renderer;
-    SDL_Texture* m_texture;
-    void check_error_sdl(bool check, const char* message);
-    void check_error_sdl_img(bool check, const char* message);
-    SDL_Texture* load_texture(const char* fname, SDL_Renderer *renderer);
+    std::unique_ptr<SDLResource> m_sdlResource;
+    std::unique_ptr<SDL_Window, SDLWindowDestroyerType> m_window;
+    std::unique_ptr<SDL_Renderer, SDLRendererDestroyerType> m_renderer;
+    std::unique_ptr<SDL_Texture, SDLTextureDestroyerType> m_texture;
     double getLatestAverageFromQueue();
 };
