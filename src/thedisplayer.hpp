@@ -22,7 +22,7 @@ class TheDisplayer {
 public:
     explicit TheDisplayer(RWQueue *lockFreeQueue);
     ~TheDisplayer();
-    void readAndDisplay();
+    void readAndDisplay() const;
 private:
     TheDisplayer(const TheDisplayer &);
     RWQueue *m_lockFreeQueue;
@@ -30,5 +30,5 @@ private:
     std::unique_ptr<SDL_Window, SDLWindowDestroyerType> m_window;
     std::unique_ptr<SDL_Renderer, SDLRendererDestroyerType> m_renderer;
     std::unique_ptr<SDL_Texture, SDLTextureDestroyerType> m_texture;
-    double getLatestAverageFromQueue();
+    double getLatestAverageFromQueue() const;
 };

@@ -96,7 +96,7 @@ TheDisplayer::~TheDisplayer(){
 }
 
 
-double TheDisplayer::getLatestAverageFromQueue(){
+double TheDisplayer::getLatestAverageFromQueue() const{
     double level = 0.;
     double sum = 0.;
     queue< double > q;
@@ -118,7 +118,7 @@ double TheDisplayer::getLatestAverageFromQueue(){
     return level;
 }
 
-void TheDisplayer::readAndDisplay(){
+void TheDisplayer::readAndDisplay() const{
     SDL_Delay(2000);
     SDL_Rect contour;
     contour.x = 350; contour.y = 50;
