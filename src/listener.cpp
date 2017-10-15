@@ -14,55 +14,36 @@ using namespace std::experimental;
 
 const int FRAMES_PER_BUFFER = 256;
 
+PortAudioResource* PortAudioResource::m_instance;
 
+PortAudioResource::PortAudioResource(){
+    int err = Pa_Initialize();
+    if( err != paNoError ){
+        cout << "Couldn't initialize PortAudio" << endl;
+        return;
+    }
+}
+PortAudioResource::~PortAudioResource(){
+    Pa_Terminate();
+}
+PortAudioResource *PortAudioResource::getInstance(){
+    if (!PortAudioResource::m_instance)
+        PortAudioResource::m_instance = new PortAudioResource();
+    return PortAudioResource::m_instance;
+}
 
 Listener::Listener(RWQueue *lockFreeQueue,
                    bool listDevices,
                    const vector< string > &preferedInputDevices,
                    const vector< string > &preferedOutputDevices) :
     m_lockFreeQueue(lockFreeQueue),
-    m_inputDeviceIndex(),
-    m_outputDeviceIndex()
+    m_portAudioResource(PortAudioResource::getInstance()),
+    m_deviceFinder(listDevices, preferedInputDevices, preferedOutputDevices)
 {
-    int err = Pa_Initialize();
-    if( err != paNoError ){
-        cout << "Couldn't initialize PortAudio" << endl;
-        return;
-    }
-    int numDevices = Pa_GetDeviceCount();
-    if( numDevices < 0 ){
-        printf( "ERROR: Pa_CountDevices returned 0x%x\n", -numDevices );
-        return;
-    }
-
-    if (listDevices){
-        findPreferedDevice("", true, false, false);
-    }
-
-    for (const string &preferedInputDeviceName : preferedInputDevices){
-        m_inputDeviceIndex = findPreferedDevice(preferedInputDeviceName, false, true, false);
-    }
-
-    for (const string &preferedOutputDeviceName : preferedOutputDevices){
-        m_outputDeviceIndex = findPreferedDevice(preferedOutputDeviceName, false, false, true);
-    }
-
-    if (this->m_inputDeviceIndex){
-        cout << endl << "Selected input device no : " << *this->m_inputDeviceIndex << endl;
-        displayDeviceInfo(Pa_GetDeviceInfo(*this->m_inputDeviceIndex), *this->m_inputDeviceIndex);
-    }
-    if (this->m_outputDeviceIndex){
-        cout << endl << "Selected output device no : " << *this->m_outputDeviceIndex << endl;
-        displayDeviceInfo(Pa_GetDeviceInfo(*this->m_outputDeviceIndex), *this->m_outputDeviceIndex);
-    }
 }
 
 Listener::~Listener(){
-    Pa_Terminate();
 }
-
-
-
 
 
 
@@ -127,13 +108,7 @@ static int patestInputCallback( const void *inputBuffer, void *outputBuffer,
 AudioInputCallbackContext Listener::createInputContext(){
     AudioInputCallbackContext context;
 
-    const PaDeviceInfo *selectedDevice = Pa_GetDeviceInfo( *this->m_inputDeviceIndex );
-    context.inputParameters.device = *this->m_inputDeviceIndex;
-    context.inputParameters.channelCount = selectedDevice->maxInputChannels;
-    context.inputParameters.sampleFormat = paFloat32;
-    context.inputParameters.suggestedLatency = selectedDevice->defaultLowOutputLatency;
-    context.inputParameters.hostApiSpecificStreamInfo = NULL;
-
+    context.inputParameters = m_deviceFinder.getInputStreamParameters();
     context.lockFreeQueue = this->m_lockFreeQueue;
     context.stereo = (context.inputParameters.channelCount == 2);
     context.sampleRate = 16000;     //selectedDevice->defaultSampleRate
@@ -223,7 +198,7 @@ class Streamer {
 
         return paContinue;
     }
-    AudioOutputCallbackContext createOutputContext(int outputDeviceIndex){
+    AudioOutputCallbackContext createOutputContext(const DeviceFinder &deviceFinder){
         AudioOutputCallbackContext context;
 
         const int sinTableSize = 256;
@@ -235,14 +210,8 @@ class Streamer {
         }
         context.leftPhase = context.rightPhase = 0;
 
-        const PaDeviceInfo *selectedDevice = Pa_GetDeviceInfo( outputDeviceIndex );
-
-        context.outputParameters.device = outputDeviceIndex;
-        context.outputParameters.channelCount = selectedDevice->maxOutputChannels;
-        context.outputParameters.sampleFormat = paFloat32; /* 32 bit floating point output */
-        context.outputParameters.suggestedLatency = selectedDevice->defaultLowOutputLatency;
-        context.outputParameters.hostApiSpecificStreamInfo = NULL;
-        int sampleRate = (selectedDevice->defaultSampleRate == 16000) ? 48000 : selectedDevice->defaultSampleRate;
+        context.outputParameters = deviceFinder.getOutputStreamParameters();
+        int sampleRate = 44100;  // (selectedDevice->defaultSampleRate == 16000) ? 48000 : selectedDevice->defaultSampleRate;
         context.adjustedVelocity = 6 * 44100.0 / sampleRate;
         context.stereo = (context.outputParameters.channelCount == 2);
         cout << "context.adjustedVelocity = " << context.adjustedVelocity << endl;
@@ -267,9 +236,9 @@ class Streamer {
         return err;
     }
 public:
-    Streamer(int outputDeviceIndex) :
-        m_context(createOutputContext(outputDeviceIndex)),
-        m_stream(nullptr)
+    explicit Streamer(const DeviceFinder &deviceFinder) :
+                      m_context(createOutputContext(deviceFinder)),
+                      m_stream(nullptr)
     {
     }
 
@@ -306,7 +275,7 @@ public:
 };
 
 void Listener::playTwoSmallHighPitchSine(){
-    Streamer(*this->m_outputDeviceIndex).startStopStreamTwice();
+    Streamer(this->m_deviceFinder).startStopStreamTwice();
 }
 
 void Listener::reallyListen(){
@@ -325,40 +294,4 @@ void Listener::listenAndWrite(){
 }
 
 
-optional< size_t > Listener::findPreferedDevice(const string &preferedDeviceName,
-                                                 bool displayDeviceNames,
-                                                 bool lookingForInputDevice,
-                                                 bool lookingForOutputDevice){
-    int numDevices = Pa_GetDeviceCount();
-    for(int i=0; i<numDevices; i++)
-    {
-        const PaDeviceInfo *deviceInfo = Pa_GetDeviceInfo(i);
-        if (displayDeviceNames){
-            displayDeviceInfo(deviceInfo, i);
-        }
 
-        const string currentDeviceName = string(deviceInfo->name);
-        if (preferedDeviceName.size() && currentDeviceName.substr(0, preferedDeviceName.size()) == preferedDeviceName){
-            return i;
-        }
-    }
-
-    return optional< size_t >();
-}
-
-
-void Listener::displayDeviceInfo(const PaDeviceInfo *deviceInfo, int deviceIndex){
-    cout << "-----------------------------------" << endl;
-    cout << "Device : " << deviceIndex << endl;
-    cout << "\t Name : \t" << deviceInfo->name << endl;
-    cout << "\t hostApi : \t" << deviceInfo->hostApi << endl;
-    cout << "\t maxInputChannels : \t" << deviceInfo->maxInputChannels << endl;
-    cout << "\t maxOutputChannels : \t" << deviceInfo->maxOutputChannels << endl;
-
-    cout << "\t defaultLowInputLatency : \t" << deviceInfo->defaultLowInputLatency << endl;
-    cout << "\t defaultLowOutputLatency : \t" << deviceInfo->defaultLowOutputLatency << endl;
-    cout << "\t defaultHighInputLatency : \t" << deviceInfo->defaultHighInputLatency << endl;
-    cout << "\t defaultHighOutputLatency : \t" << deviceInfo->defaultHighOutputLatency << endl;
-    cout << "\t defaultSampleRate : \t" << deviceInfo->defaultSampleRate << endl;
-    cout << "-----------------------------------" << endl;
-}

@@ -1,10 +1,22 @@
 #include <portaudio.h>
-#include "rwqueuetype.hpp"
 #include <vector>
 #include <experimental/optional>
 
+#include "rwqueuetype.hpp"
+#include "devicefinder.hpp"
 
 class AudioInputCallbackContext;
+
+
+// Singleton that takes care of C-style resource : Pa_Initialize Pa_Terminate
+class PortAudioResource {
+public:
+    ~PortAudioResource();
+    static PortAudioResource *getInstance();
+private:
+    static PortAudioResource *m_instance;
+    PortAudioResource();
+};
 
 class Listener {
 public:
@@ -16,18 +28,12 @@ public:
     void listenAndWrite();
 private:
     RWQueue *m_lockFreeQueue;
-    std::experimental::optional< size_t > m_inputDeviceIndex;
-    std::experimental::optional< size_t > m_outputDeviceIndex;
-    void displayDeviceInfo(const PaDeviceInfo *deviceInfo, int deviceIndex);
+    std::unique_ptr<PortAudioResource> m_portAudioResource;
+    DeviceFinder m_deviceFinder;
     void playTwoSmallHighPitchSine();
     void reallyListen();
     AudioInputCallbackContext createInputContext();
     PaError openInputStream(PaStream *&stream, AudioInputCallbackContext &context);
     int startStopStream(PaStream *stream);
 
-    std::experimental::optional< size_t > findPreferedDevice(
-                                                     const std::string &deviceName,
-                                                     bool displayDeviceNames,
-                                                     bool lookingForInputDevice,
-                                                     bool lookingForOutputDevice);
 };

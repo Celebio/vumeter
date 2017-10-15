@@ -12,11 +12,9 @@ SDLResource::SDLResource(){
     SDL_Init(SDL_INIT_VIDEO);
 }
 SDLResource::~SDLResource(){
-    std::cout << "Destroying SDLResource" << std::endl;
     IMG_Quit();
     SDL_Quit();
 }
-
 SDLResource *SDLResource::getInstance(){
     if (!SDLResource::m_instance)
         SDLResource::m_instance = new SDLResource();
