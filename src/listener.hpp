@@ -3,7 +3,7 @@
 #include <vector>
 #include <experimental/optional>
 
-class AudioOutputCallbackContext;
+
 class AudioInputCallbackContext;
 
 class Listener {
@@ -22,11 +22,8 @@ private:
     void playTwoSmallHighPitchSine();
     void reallyListen();
     AudioInputCallbackContext createInputContext();
-    AudioOutputCallbackContext createOutputContext();
     PaError openInputStream(PaStream *&stream, AudioInputCallbackContext &context);
-    PaError openOutputStream(PaStream *&stream, AudioOutputCallbackContext &context);
     int startStopStream(PaStream *stream);
-    int startStopStreamTwice(PaStream *stream);
 
     std::experimental::optional< size_t > findPreferedDevice(
                                                      const std::string &deviceName,

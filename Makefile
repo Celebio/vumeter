@@ -10,7 +10,7 @@ SDL = `sdl2-config --cflags --libs` -lSDL2_image
 SDLINC = `sdl2-config --cflags --libs`
 endif
 
-CXXFLAGS = -Wall -c -D_AIX_PTHREADS_D7 -std=c++14 $(SDLINC) -I/Library/Frameworks/SDL2.framework/Headers/ -I/Library/Frameworks/SDL2_image.framework/Headers/ -I/Library/Frameworks/SDL2_ttf.framework/Headers/
+CXXFLAGS = -Wall -g -c -D_AIX_PTHREADS_D7 -std=c++14 $(SDLINC) -I/Library/Frameworks/SDL2.framework/Headers/ -I/Library/Frameworks/SDL2_image.framework/Headers/ -I/Library/Frameworks/SDL2_ttf.framework/Headers/
 LDFLAGS = $(SDL) -lportaudio -lpthread
 EXE = bin/vumeter
 

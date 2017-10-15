@@ -8,6 +8,8 @@ void signalHandler(int s){
 }
 
 int main(int argc, char *argv[]){
+    // raise(SIGSTOP);
+
     struct sigaction sigIntHandler;
 
     sigIntHandler.sa_handler = signalHandler;
