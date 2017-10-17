@@ -6,7 +6,7 @@
 #include <time.h>
 
 #include "listener.hpp"
-#include "thedisplayer.hpp"
+#include "displayer.hpp"
 
 using namespace std;
 
@@ -20,7 +20,7 @@ void VuMeter::audioThreadFunction(){
 }
 
 void VuMeter::guiThreadFunction(){
-    TheDisplayer(&m_lockFreeQueue).readAndDisplay();
+    Displayer(&m_lockFreeQueue).readAndDisplay();
 }
 
 VuMeter::VuMeter() :

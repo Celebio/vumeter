@@ -18,13 +18,13 @@ private:
 };
 
 
-class TheDisplayer {
+class Displayer {
 public:
-    explicit TheDisplayer(RWQueue *lockFreeQueue);
-    ~TheDisplayer();
+    explicit Displayer(RWQueue *lockFreeQueue);
+    ~Displayer();
     void readAndDisplay() const;
 private:
-    TheDisplayer(const TheDisplayer &);
+    Displayer(const Displayer &);
     RWQueue *m_lockFreeQueue;
     std::unique_ptr<SDLResource> m_sdlResource;
     std::unique_ptr<SDL_Window, SDLWindowDestroyerType> m_window;

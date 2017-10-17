@@ -1,4 +1,4 @@
-#include "thedisplayer.hpp"
+#include "displayer.hpp"
 
 #include <SDL_image.h>
 #include <iostream>
@@ -53,7 +53,7 @@ auto makeResource(Creator c, Destructor d, Arguments&&... args)
 }
 
 
-TheDisplayer::TheDisplayer(RWQueue *lockFreeQueue) :
+Displayer::Displayer(RWQueue *lockFreeQueue) :
     m_lockFreeQueue(lockFreeQueue),
     m_sdlResource(SDLResource::getInstance()),
     m_window(makeResource(SDL_CreateWindow, SDL_DestroyWindow, "Sebastien", 0, 0, 800, 600, SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL)),
@@ -91,11 +91,11 @@ TheDisplayer::TheDisplayer(RWQueue *lockFreeQueue) :
     std::cout << "height = " << height << std::endl;
 }
 
-TheDisplayer::~TheDisplayer(){
+Displayer::~Displayer(){
 }
 
 
-double TheDisplayer::getLatestAverageFromQueue() const{
+double Displayer::getLatestAverageFromQueue() const{
     double level = 0.;
     double sum = 0.;
     queue< double > q;
@@ -117,7 +117,7 @@ double TheDisplayer::getLatestAverageFromQueue() const{
     return level;
 }
 
-void TheDisplayer::readAndDisplay() const{
+void Displayer::readAndDisplay() const{
     SDL_Delay(2000);
     SDL_Rect contour;
     contour.x = 350; contour.y = 50;
