@@ -211,7 +211,7 @@ class Streamer {
         context.leftPhase = context.rightPhase = 0;
 
         context.outputParameters = deviceFinder.getOutputStreamParameters();
-        int sampleRate = 44100;  // (selectedDevice->defaultSampleRate == 16000) ? 48000 : selectedDevice->defaultSampleRate;
+        int sampleRate = 48000;  // (selectedDevice->defaultSampleRate == 16000) ? 48000 : selectedDevice->defaultSampleRate;
         context.adjustedVelocity = 6 * 44100.0 / sampleRate;
         context.stereo = (context.outputParameters.channelCount == 2);
         cout << "context.adjustedVelocity = " << context.adjustedVelocity << endl;

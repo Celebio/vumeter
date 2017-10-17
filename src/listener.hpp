@@ -1,6 +1,7 @@
 #include <portaudio.h>
 #include <vector>
 #include <experimental/optional>
+#include <memory>
 
 #include "rwqueuetype.hpp"
 #include "devicefinder.hpp"

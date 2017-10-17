@@ -26,11 +26,17 @@ DeviceFinder::DeviceFinder() :
     }
 
     for (const string &preferedInputDeviceName : preferedInputDevices){
-        m_inputDeviceIndex = findPreferedDevice(preferedInputDeviceName, false, true, false);
+        auto deviceIndex = findPreferedDevice(preferedInputDeviceName, false, true, false);
+        if (deviceIndex){
+            m_inputDeviceIndex = deviceIndex;
+        }
     }
 
     for (const string &preferedOutputDeviceName : preferedOutputDevices){
-        m_outputDeviceIndex = findPreferedDevice(preferedOutputDeviceName, false, false, true);
+        auto deviceIndex = findPreferedDevice(preferedOutputDeviceName, false, false, true);
+        if (deviceIndex){
+            m_outputDeviceIndex = deviceIndex;
+        }
     }
 
     if (this->m_inputDeviceIndex){
@@ -78,7 +84,12 @@ optional< size_t > DeviceFinder::findPreferedDevice(const string &preferedDevice
         }
 
         const string currentDeviceName = string(deviceInfo->name);
-        if (preferedDeviceName.size() && currentDeviceName.substr(0, preferedDeviceName.size()) == preferedDeviceName){
+
+        if (preferedDeviceName.size() &&
+            currentDeviceName.substr(0, preferedDeviceName.size()) == preferedDeviceName &&
+            ((lookingForInputDevice && deviceInfo->maxInputChannels) ||
+             (lookingForOutputDevice && deviceInfo->maxOutputChannels))
+           ){
             return i;
         }
     }
