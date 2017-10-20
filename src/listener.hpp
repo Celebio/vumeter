@@ -35,6 +35,6 @@ private:
     void reallyListen();
     AudioInputCallbackContext createInputContext();
     PaError openInputStream(PaStream *&stream, AudioInputCallbackContext &context);
-    int startStopStream(PaStream *stream);
+    void startStopStream(PaStream *stream);
 
 };

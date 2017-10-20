@@ -14,14 +14,22 @@ using namespace std::experimental;
 
 const int FRAMES_PER_BUFFER = 256;
 
+
+class Sanity {
+public:
+    class PortAudioError {};
+    static void checkNoError(PaError err){
+        if (err != paNoError){
+            throw PortAudioError();
+        }
+    }
+};
+
+
 PortAudioResource* PortAudioResource::m_instance;
 
 PortAudioResource::PortAudioResource(){
-    int err = Pa_Initialize();
-    if( err != paNoError ){
-        cout << "Couldn't initialize PortAudio" << endl;
-        return;
-    }
+    Sanity::checkNoError(Pa_Initialize());
 }
 PortAudioResource::~PortAudioResource(){
     Pa_Terminate();
@@ -31,6 +39,42 @@ PortAudioResource *PortAudioResource::getInstance(){
         PortAudioResource::m_instance = new PortAudioResource();
     return PortAudioResource::m_instance;
 }
+
+
+
+template < typename StreamCallbackFunctor >
+int openStreamWrapper(const void *inputBuffer, void *outputBuffer,
+                      unsigned long framesPerBuffer,
+                      const PaStreamCallbackTimeInfo* timeInfo,
+                      PaStreamCallbackFlags statusFlags,
+                      void *functor){
+    return (static_cast< StreamCallbackFunctor * >(functor))
+        ->audioCallback(inputBuffer,
+                        outputBuffer,
+                        framesPerBuffer,
+                        timeInfo,
+                        statusFlags);
+}
+
+template < typename StreamCallbackFunctor >
+PaError openStream(PaStream **stream,
+               const PaStreamParameters *inputParameters,
+               const PaStreamParameters *outputParameters,
+               double sampleRate,
+               unsigned long framesPerBuffer,
+               PaStreamFlags streamFlags,
+               StreamCallbackFunctor &streamCallbackFunctor){
+    return Pa_OpenStream(stream,
+                         inputParameters,
+                         outputParameters,
+                         sampleRate,
+                         framesPerBuffer,
+                         streamFlags,
+                         openStreamWrapper< StreamCallbackFunctor >,
+                         &streamCallbackFunctor);
+}
+
+
 
 Listener::Listener(RWQueue *lockFreeQueue,
                    bool listDevices,
@@ -45,22 +89,6 @@ Listener::Listener(RWQueue *lockFreeQueue,
 Listener::~Listener(){
 }
 
-
-
-class AudioOutputCallbackContext {
-public:
-    PaStreamParameters outputParameters;
-    vector<float> sine;
-    double leftPhase;
-    double rightPhase;
-    double adjustedVelocity;
-    bool stereo;
-    high_resolution_clock::time_point lastTime;
-    double lastTimeSum;
-    int lastTimeCtr;
-    double sampleRate;
-    int framesPerBuffer;
-};
 
 class AudioInputCallbackContext {
 public:
@@ -109,7 +137,7 @@ AudioInputCallbackContext Listener::createInputContext(){
     AudioInputCallbackContext context;
 
     context.inputParameters = m_deviceFinder.getInputStreamParameters();
-    context.lockFreeQueue = this->m_lockFreeQueue;
+    context.lockFreeQueue = m_lockFreeQueue;
     context.stereo = (context.inputParameters.channelCount == 2);
     context.sampleRate = 16000;     //selectedDevice->defaultSampleRate
     context.framesPerBuffer = FRAMES_PER_BUFFER;
@@ -130,152 +158,140 @@ PaError Listener::openInputStream(PaStream *&stream,
               &context );
 }
 
-int Listener::startStopStream(PaStream *stream) {
-    PaError err = Pa_StartStream( stream );
-    if( err != paNoError ) goto error;
 
+
+void Listener::startStopStream(PaStream *stream) {
+    Sanity::checkNoError(Pa_StartStream( stream ));
     pause();
-
-    err = Pa_StopStream( stream );
-    if( err != paNoError ) goto error;
-
-    err = Pa_CloseStream( stream );
-    if( err != paNoError ) goto error;
-error:
-    return err;
+    Sanity::checkNoError(Pa_StopStream( stream ));
+    Sanity::checkNoError(Pa_CloseStream( stream ));
 }
 
-
+template <class SubClass >
 class Streamer {
-    AudioOutputCallbackContext m_context;
+    friend int openStreamWrapper< Streamer >(const void *inputBuffer, void *outputBuffer,
+                      unsigned long framesPerBuffer,
+                      const PaStreamCallbackTimeInfo* timeInfo,
+                      PaStreamCallbackFlags statusFlags,
+                      void *functor);
+protected:
     PaStream *m_stream;
+    PaStreamParameters m_outputParameters;
+    double m_sampleRate;
+    int m_framesPerBuffer;
 
-    static int patestCallback( const void *inputBuffer, void *outputBuffer,
-                            unsigned long framesPerBuffer,
-                            const PaStreamCallbackTimeInfo* timeInfo,
-                            PaStreamCallbackFlags statusFlags,
-                            void *userData )
-    {
-        Streamer *me = (Streamer*)userData;
-        return me->audioCallback(inputBuffer, outputBuffer, framesPerBuffer, timeInfo,
-                                 statusFlags);
+    PaError openOutputStream(){
+        PaError err = openStream(&m_stream, NULL,
+            &m_outputParameters,
+            m_sampleRate,
+            m_framesPerBuffer,
+            paClipOff,
+            *this);
+        return err;
     }
+    virtual int audioCallback(const void *inputBuffer, void *outputBuffer,
+                      unsigned long framesPerBuffer,
+                      const PaStreamCallbackTimeInfo* timeInfo,
+                      PaStreamCallbackFlags statusFlags) = 0;
+public:
+    explicit Streamer(const DeviceFinder &deviceFinder) : m_stream(nullptr) {
+    }
+
+};
+
+
+class OutputStreamer : public Streamer < OutputStreamer > {
+    vector<float> m_sine;
+    double m_leftPhase;
+    double m_rightPhase;
+    double m_adjustedVelocity;
+    bool m_stereo;
+    high_resolution_clock::time_point m_lastTime;
+    double m_lastTimeSum;
+    int m_lastTimeCtr;
+
     int audioCallback(const void *inputBuffer, void *outputBuffer,
                       unsigned long framesPerBuffer,
                       const PaStreamCallbackTimeInfo* timeInfo,
                       PaStreamCallbackFlags statusFlags){
-        AudioOutputCallbackContext *ctx = &m_context;
         float *out = (float*)outputBuffer;
-        double adjustedVelocity = ctx->adjustedVelocity;
+        double adjustedVelocity = m_adjustedVelocity;
 
-        const int sinTableSize = ctx->sine.size();
+        const int sinTableSize = m_sine.size();
         // cout << "sinTableSize = " << sinTableSize << endl;
         for(unsigned long i=0; i<framesPerBuffer; i++ )
         {
-            *out++ = ctx->sine[(int)(ctx->leftPhase)];
-            *out++ = ctx->sine[(int)(ctx->rightPhase)];
+            *out++ = m_sine[(int)(m_leftPhase)];
+            *out++ = m_sine[(int)(m_rightPhase)];
 
             // a funny chord
-            ctx->leftPhase += (0.5 * (1 * adjustedVelocity) + 0.5 * (1.5 * adjustedVelocity));
-            ctx->rightPhase += (0.5 * (1 * adjustedVelocity) + 0.5 * (2 * adjustedVelocity));
+            m_leftPhase += (0.5 * (1 * adjustedVelocity) + 0.5 * (1.5 * adjustedVelocity));
+            m_rightPhase += (0.5 * (1 * adjustedVelocity) + 0.5 * (2 * adjustedVelocity));
 
-            if( ctx->leftPhase >= sinTableSize ) ctx->leftPhase -= sinTableSize;
-            if( ctx->rightPhase >= sinTableSize ) ctx->rightPhase -= sinTableSize;
+            if( m_leftPhase >= sinTableSize ) m_leftPhase -= sinTableSize;
+            if( m_rightPhase >= sinTableSize ) m_rightPhase -= sinTableSize;
         }
         high_resolution_clock::time_point t1 = high_resolution_clock::now();
-        duration<double, std::milli> time_span = t1 - ctx->lastTime;
+        duration<double, std::milli> time_span = t1 - m_lastTime;
 
-        ctx->lastTime = t1;
-        ctx->lastTimeSum += time_span.count();
-        ctx->lastTimeCtr++;
+        m_lastTime = t1;
+        m_lastTimeSum += time_span.count();
+        m_lastTimeCtr++;
         int nb = 5;
-        if (ctx->lastTimeCtr>=nb){
+        if (m_lastTimeCtr>=nb){
             // only for debug, we should not have a system call inside the callback
-            //cout << "Time avg : " <<  (ctx->lastTimeSum/(double)nb) << endl;
-            ctx->lastTimeCtr = 0;
-            ctx->lastTimeSum = 0;
+            //cout << "Time avg : " <<  (m_lastTimeSum/(double)nb) << endl;
+            m_lastTimeCtr = 0;
+            m_lastTimeSum = 0;
         }
 
         return paContinue;
     }
-    AudioOutputCallbackContext createOutputContext(const DeviceFinder &deviceFinder){
-        AudioOutputCallbackContext context;
+public:
 
+    explicit OutputStreamer(const DeviceFinder &deviceFinder) : Streamer(deviceFinder)
+    {
         const int sinTableSize = 256;
 
-        context.sine.resize(sinTableSize);
+        m_sine.resize(sinTableSize);
         for(int i=0; i<sinTableSize; i++ )
         {
-            context.sine[i] = (float) 1.0 * sin( ((double)i/(double)sinTableSize) * M_PI * 2. );
+            m_sine[i] = (float) 1.0 * sin( ((double)i/(double)sinTableSize) * M_PI * 2. );
         }
-        context.leftPhase = context.rightPhase = 0;
+        m_leftPhase = m_rightPhase = 0;
 
-        context.outputParameters = deviceFinder.getOutputStreamParameters();
+        m_outputParameters = deviceFinder.getOutputStreamParameters();
         int sampleRate = 48000;  // (selectedDevice->defaultSampleRate == 16000) ? 48000 : selectedDevice->defaultSampleRate;
-        context.adjustedVelocity = 6 * 44100.0 / sampleRate;
-        context.stereo = (context.outputParameters.channelCount == 2);
-        cout << "context.adjustedVelocity = " << context.adjustedVelocity << endl;
-        context.lastTime = high_resolution_clock::now();
-        context.lastTimeSum = 0.0;
-        context.lastTimeCtr = 0;
-        context.sampleRate = sampleRate;
-        context.framesPerBuffer = FRAMES_PER_BUFFER;
-
-        return context;
-    }
-    PaError openOutputStream(){
-        PaError err = Pa_OpenStream(
-            &m_stream,
-            NULL, /* no input */
-            &(m_context.outputParameters),
-            m_context.sampleRate,
-            m_context.framesPerBuffer,
-            paClipOff,
-            &Streamer::patestCallback,
-            this );
-        return err;
-    }
-public:
-    explicit Streamer(const DeviceFinder &deviceFinder) :
-                      m_context(createOutputContext(deviceFinder)),
-                      m_stream(nullptr)
-    {
+        m_adjustedVelocity = 6 * 44100.0 / sampleRate;
+        m_stereo = (m_outputParameters.channelCount == 2);
+        cout << "m_adjustedVelocity = " << m_adjustedVelocity << endl;
+        m_lastTime = high_resolution_clock::now();
+        m_lastTimeSum = 0.0;
+        m_lastTimeCtr = 0;
+        m_sampleRate = sampleRate;
+        m_framesPerBuffer = FRAMES_PER_BUFFER;
     }
 
-    PaError startStopStreamTwice(){
+    void startStopStreamTwice(){
         const int duration = 180;
 
-        PaError err = openOutputStream();
-        if( err != paNoError ) goto error;
-
-        err = Pa_StartStream( m_stream );
-        if( err != paNoError ) goto error;
-
+        Sanity::checkNoError(openOutputStream());
+        Sanity::checkNoError(Pa_StartStream(m_stream));
+        Pa_Sleep(duration);
+        Sanity::checkNoError(Pa_StopStream(m_stream));
         Pa_Sleep( duration );
-
-        err = Pa_StopStream( m_stream );
-        if( err != paNoError ) goto error;
-
-        Pa_Sleep( duration );
-
-        err = Pa_StartStream( m_stream );
-        if( err != paNoError ) goto error;
-
-        Pa_Sleep( duration );
-
-        err = Pa_StopStream( m_stream );
-        if( err != paNoError ) goto error;
-
-        err = Pa_CloseStream( m_stream );
-        if( err != paNoError ) goto error;
-
-        error:
-            return err;
+        Sanity::checkNoError(Pa_StartStream(m_stream));
+        Pa_Sleep(duration);
+        Sanity::checkNoError(Pa_StopStream(m_stream));
+        Sanity::checkNoError(Pa_CloseStream(m_stream));
     }
 };
 
+
+
+
 void Listener::playTwoSmallHighPitchSine(){
-    Streamer(this->m_deviceFinder).startStopStreamTwice();
+    OutputStreamer(m_deviceFinder).startStopStreamTwice();
 }
 
 void Listener::reallyListen(){
