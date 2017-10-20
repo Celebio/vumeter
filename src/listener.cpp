@@ -1,4 +1,7 @@
 #include "listener.hpp"
+#include "sanity.hpp"
+#include "portaudiostreamer.hpp"
+
 #include <iostream>
 #include <string.h>
 #include <math.h>
@@ -15,192 +18,59 @@ using namespace std::experimental;
 const int FRAMES_PER_BUFFER = 256;
 
 
-class Sanity {
-public:
-    class PortAudioError {};
-    static void checkNoError(PaError err){
-        if (err != paNoError){
-            throw PortAudioError();
-        }
-    }
-};
 
+class InputStreamer : public PortAudioStreamer {
+    RWQueue *m_lockFreeQueue;
+    bool m_stereo;
 
-PortAudioResource* PortAudioResource::m_instance;
-
-PortAudioResource::PortAudioResource(){
-    Sanity::checkNoError(Pa_Initialize());
-}
-PortAudioResource::~PortAudioResource(){
-    Pa_Terminate();
-}
-PortAudioResource *PortAudioResource::getInstance(){
-    if (!PortAudioResource::m_instance)
-        PortAudioResource::m_instance = new PortAudioResource();
-    return PortAudioResource::m_instance;
-}
-
-
-
-template < typename StreamCallbackFunctor >
-int openStreamWrapper(const void *inputBuffer, void *outputBuffer,
+    int audioCallback(const void *inputBuffer, void *outputBuffer,
                       unsigned long framesPerBuffer,
                       const PaStreamCallbackTimeInfo* timeInfo,
-                      PaStreamCallbackFlags statusFlags,
-                      void *functor){
-    return (static_cast< StreamCallbackFunctor * >(functor))
-        ->audioCallback(inputBuffer,
-                        outputBuffer,
-                        framesPerBuffer,
-                        timeInfo,
-                        statusFlags);
-}
+                      PaStreamCallbackFlags statusFlags){
+        float *in = (float*)inputBuffer;
+        double avg = 0.0;
 
-template < typename StreamCallbackFunctor >
-PaError openStream(PaStream **stream,
-               const PaStreamParameters *inputParameters,
-               const PaStreamParameters *outputParameters,
-               double sampleRate,
-               unsigned long framesPerBuffer,
-               PaStreamFlags streamFlags,
-               StreamCallbackFunctor &streamCallbackFunctor){
-    return Pa_OpenStream(stream,
-                         inputParameters,
-                         outputParameters,
-                         sampleRate,
-                         framesPerBuffer,
-                         streamFlags,
-                         openStreamWrapper< StreamCallbackFunctor >,
-                         &streamCallbackFunctor);
-}
+        for(unsigned long i=0; i<framesPerBuffer; i++ )
+        {
+            float left = *in++;
+            float leftSq = left*left*256*256;
+            float rightSq = 0;
 
+            if (m_stereo){
+                float right = *in++;
+                rightSq = right*right*256*256;
+                avg += (((leftSq + rightSq)/2.0));
+            } else {
+                avg += (leftSq);
+            }
+        }
+        m_lockFreeQueue->try_enqueue((int)(avg*10.0/framesPerBuffer));
 
-
-Listener::Listener(RWQueue *lockFreeQueue,
-                   bool listDevices,
-                   const vector< string > &preferedInputDevices,
-                   const vector< string > &preferedOutputDevices) :
-    m_lockFreeQueue(lockFreeQueue),
-    m_portAudioResource(PortAudioResource::getInstance()),
-    m_deviceFinder(listDevices, preferedInputDevices, preferedOutputDevices)
-{
-}
-
-Listener::~Listener(){
-}
-
-
-class AudioInputCallbackContext {
+        return paContinue;
+    }
 public:
-    PaStreamParameters inputParameters;
-    RWQueue *lockFreeQueue;
-    bool stereo;
-    double sampleRate;
-    int framesPerBuffer;
-};
-
-
-
-
-static int patestInputCallback( const void *inputBuffer, void *outputBuffer,
-                                unsigned long framesPerBuffer,
-                                const PaStreamCallbackTimeInfo* timeInfo,
-                                PaStreamCallbackFlags statusFlags,
-                                void *userData )
-{
-    AudioInputCallbackContext *ctx = (AudioInputCallbackContext*)userData;
-    float *in = (float*)inputBuffer;
-    RWQueue *lockFreeQueue = ctx->lockFreeQueue;
-    double avg = 0.0;
-
-    for(unsigned long i=0; i<framesPerBuffer; i++ )
+    explicit InputStreamer(const DeviceFinder &deviceFinder,
+                           RWQueue *lockFreeQueue) :
+        PortAudioStreamer(deviceFinder),
+        m_lockFreeQueue(lockFreeQueue)
     {
-        float left = *in++;
-        float leftSq = left*left*256*256;
-        float rightSq = 0;
-
-        if (ctx->stereo){
-            float right = *in++;
-            rightSq = right*right*256*256;
-            avg += (((leftSq + rightSq)/2.0));
-        } else {
-            avg += (leftSq);
-        }
-    }
-    lockFreeQueue->try_enqueue((int)(avg*10.0/framesPerBuffer));
-
-    return paContinue;
-}
-
-
-AudioInputCallbackContext Listener::createInputContext(){
-    AudioInputCallbackContext context;
-
-    context.inputParameters = m_deviceFinder.getInputStreamParameters();
-    context.lockFreeQueue = m_lockFreeQueue;
-    context.stereo = (context.inputParameters.channelCount == 2);
-    context.sampleRate = 16000;     //selectedDevice->defaultSampleRate
-    context.framesPerBuffer = FRAMES_PER_BUFFER;
-
-    return context;
-}
-
-PaError Listener::openInputStream(PaStream *&stream,
-                                  AudioInputCallbackContext &context){
-    return Pa_OpenStream(
-              &stream,
-              &context.inputParameters,
-              NULL,
-              context.sampleRate,
-              context.framesPerBuffer,
-              paClipOff,
-              patestInputCallback,
-              &context );
-}
-
-
-
-void Listener::startStopStream(PaStream *stream) {
-    Sanity::checkNoError(Pa_StartStream( stream ));
-    pause();
-    Sanity::checkNoError(Pa_StopStream( stream ));
-    Sanity::checkNoError(Pa_CloseStream( stream ));
-}
-
-template <class SubClass >
-class Streamer {
-    friend int openStreamWrapper< Streamer >(const void *inputBuffer, void *outputBuffer,
-                      unsigned long framesPerBuffer,
-                      const PaStreamCallbackTimeInfo* timeInfo,
-                      PaStreamCallbackFlags statusFlags,
-                      void *functor);
-protected:
-    PaStream *m_stream;
-    PaStreamParameters m_outputParameters;
-    double m_sampleRate;
-    int m_framesPerBuffer;
-
-    PaError openOutputStream(){
-        PaError err = openStream(&m_stream, NULL,
-            &m_outputParameters,
-            m_sampleRate,
-            m_framesPerBuffer,
-            paClipOff,
-            *this);
-        return err;
-    }
-    virtual int audioCallback(const void *inputBuffer, void *outputBuffer,
-                      unsigned long framesPerBuffer,
-                      const PaStreamCallbackTimeInfo* timeInfo,
-                      PaStreamCallbackFlags statusFlags) = 0;
-public:
-    explicit Streamer(const DeviceFinder &deviceFinder) : m_stream(nullptr) {
+        m_inputParameters = deviceFinder.getInputStreamParameters();
+        m_sampleRate = 16000;
+        m_framesPerBuffer = FRAMES_PER_BUFFER;
+        m_stereo = (m_inputParameters->channelCount == 2);
     }
 
+    void waitForever(){
+        Sanity::checkNoError(openStream());
+        Sanity::checkNoError(Pa_StartStream(m_stream));
+        pause();
+        Sanity::checkNoError(Pa_StopStream(m_stream));
+        Sanity::checkNoError(Pa_CloseStream(m_stream));
+    }
 };
 
 
-class OutputStreamer : public Streamer < OutputStreamer > {
+class SineOutputStreamer : public PortAudioStreamer {
     vector<float> m_sine;
     double m_leftPhase;
     double m_rightPhase;
@@ -249,25 +119,30 @@ class OutputStreamer : public Streamer < OutputStreamer > {
     }
 public:
 
-    explicit OutputStreamer(const DeviceFinder &deviceFinder) : Streamer(deviceFinder)
+    explicit SineOutputStreamer(const DeviceFinder &deviceFinder) :
+        PortAudioStreamer(deviceFinder),
+        m_sine(),
+        m_leftPhase(0),
+        m_rightPhase(0),
+        m_adjustedVelocity(),
+        m_stereo(),
+        m_lastTime(high_resolution_clock::now()),
+        m_lastTimeSum(0.0),
+        m_lastTimeCtr(0)
     {
         const int sinTableSize = 256;
 
         m_sine.resize(sinTableSize);
         for(int i=0; i<sinTableSize; i++ )
         {
-            m_sine[i] = (float) 1.0 * sin( ((double)i/(double)sinTableSize) * M_PI * 2. );
+            m_sine[i] = (float) 0.2 * sin( ((double)i/(double)sinTableSize) * M_PI * 2. );
         }
-        m_leftPhase = m_rightPhase = 0;
 
         m_outputParameters = deviceFinder.getOutputStreamParameters();
-        int sampleRate = 48000;  // (selectedDevice->defaultSampleRate == 16000) ? 48000 : selectedDevice->defaultSampleRate;
+        int sampleRate = 48000;
         m_adjustedVelocity = 6 * 44100.0 / sampleRate;
-        m_stereo = (m_outputParameters.channelCount == 2);
-        cout << "m_adjustedVelocity = " << m_adjustedVelocity << endl;
-        m_lastTime = high_resolution_clock::now();
-        m_lastTimeSum = 0.0;
-        m_lastTimeCtr = 0;
+        m_stereo = (m_outputParameters->channelCount == 2);
+        // cout << "m_adjustedVelocity = " << m_adjustedVelocity << endl;
         m_sampleRate = sampleRate;
         m_framesPerBuffer = FRAMES_PER_BUFFER;
     }
@@ -275,11 +150,11 @@ public:
     void startStopStreamTwice(){
         const int duration = 180;
 
-        Sanity::checkNoError(openOutputStream());
+        Sanity::checkNoError(openStream());
         Sanity::checkNoError(Pa_StartStream(m_stream));
         Pa_Sleep(duration);
         Sanity::checkNoError(Pa_StopStream(m_stream));
-        Pa_Sleep( duration );
+        Pa_Sleep(duration);
         Sanity::checkNoError(Pa_StartStream(m_stream));
         Pa_Sleep(duration);
         Sanity::checkNoError(Pa_StopStream(m_stream));
@@ -289,18 +164,26 @@ public:
 
 
 
+Listener::Listener(RWQueue *lockFreeQueue,
+                   bool listDevices,
+                   const vector< string > &preferedInputDevices,
+                   const vector< string > &preferedOutputDevices) :
+    m_lockFreeQueue(lockFreeQueue),
+    m_portAudioResource(PortAudioResource::getInstance()),
+    m_deviceFinder(listDevices, preferedInputDevices, preferedOutputDevices)
+{
+}
+
+Listener::~Listener(){
+}
 
 void Listener::playTwoSmallHighPitchSine(){
-    OutputStreamer(m_deviceFinder).startStopStreamTwice();
+    SineOutputStreamer(m_deviceFinder).startStopStreamTwice();
 }
 
 void Listener::reallyListen(){
-    PaStream *stream = nullptr;
-    AudioInputCallbackContext context = createInputContext();
-    openInputStream(stream, context);
-    startStopStream(stream);
+    InputStreamer(m_deviceFinder, m_lockFreeQueue).waitForever();
 }
-
 
 void Listener::listenAndWrite(){
     cout << "SAV des emissions j'ecoute" << endl;

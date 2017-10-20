@@ -1,3 +1,6 @@
+#ifndef DEVICE_DISPLAYER_HPP
+#define DEVICE_DISPLAYER_HPP
+
 #include "rwqueuetype.hpp"
 #include <SDL.h>
 #include <memory>
@@ -32,3 +35,5 @@ private:
     std::unique_ptr<SDL_Texture, SDLTextureDestroyerType> m_texture;
     double getLatestAverageFromQueue() const;
 };
+
+#endif

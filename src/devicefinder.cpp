@@ -56,7 +56,7 @@ PaStreamParameters DeviceFinder::getOutputStreamParameters() const {
     return getStreamParameters(m_outputDeviceIndex, &PaDeviceInfo::maxOutputChannels);
 }
 
-PaStreamParameters DeviceFinder::getStreamParameters(std::experimental::optional< size_t > deviceIndex, int PaDeviceInfo::*channelCount) const {
+PaStreamParameters DeviceFinder::getStreamParameters(optional< size_t > deviceIndex, int PaDeviceInfo::*channelCount) const {
     PaStreamParameters streamParameters;
 
     const PaDeviceInfo *selectedDevice = Pa_GetDeviceInfo( *deviceIndex );

@@ -1,3 +1,7 @@
+#ifndef DEVICE_VUMETER_HPP
+#define DEVICE_VUMETER_HPP
+
+
 #include "rwqueuetype.hpp"
 
 
@@ -12,4 +16,4 @@ private:
     void guiThreadFunction();
 };
 
-
+#endif

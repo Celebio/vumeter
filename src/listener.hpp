@@ -1,3 +1,6 @@
+#ifndef DEVICE_LISTENER_HPP
+#define DEVICE_LISTENER_HPP
+
 #include <portaudio.h>
 #include <vector>
 #include <experimental/optional>
@@ -5,19 +8,13 @@
 
 #include "rwqueuetype.hpp"
 #include "devicefinder.hpp"
+#include "portaudioresource.hpp"
+
 
 class AudioInputCallbackContext;
 
 
-// Singleton that takes care of C-style resource : Pa_Initialize Pa_Terminate
-class PortAudioResource {
-public:
-    ~PortAudioResource();
-    static PortAudioResource *getInstance();
-private:
-    static PortAudioResource *m_instance;
-    PortAudioResource();
-};
+
 
 class Listener {
 public:
@@ -38,3 +35,5 @@ private:
     void startStopStream(PaStream *stream);
 
 };
+
+#endif

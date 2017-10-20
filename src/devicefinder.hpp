@@ -1,3 +1,6 @@
+#ifndef DEVICE_FINDER_HPP
+#define DEVICE_FINDER_HPP
+
 #include <portaudio.h>
 #include <vector>
 #include <experimental/optional>
@@ -24,3 +27,5 @@ private:
                                                      bool lookingForOutputDevice);
 
 };
+
+#endif
