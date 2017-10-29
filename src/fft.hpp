@@ -31,12 +31,13 @@ public:
 
 private:
     static ComplexPolynomial eval(const ComplexPolynomial &coefs, const Complex &omega, int numberOfPoints);
-    static ComplexPolynomial fastEval(const ComplexPolynomial &a, int start, int step, Complex omega, int n);
+    static void fastEvalWithBuffer(const ComplexPolynomial &a, size_t start, size_t step, Complex omega, size_t n, size_t outOffset, ComplexPolynomial &out, ComplexPolynomial &buffer);
     static int adjustedNumberOfPoints(int numberOfPoints);
     static Complex computeOmega(int numberOfPoints);
 
     // for debug:
     static ComplexPolynomial slowEval(const ComplexPolynomial &coefs, const Complex &omega, int numberOfPoints);
+    static ComplexPolynomial fastEvalWithAllocation(const ComplexPolynomial &a, size_t start, size_t step, Complex omega, size_t n);
 };
 
 

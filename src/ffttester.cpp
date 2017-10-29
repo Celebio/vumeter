@@ -62,7 +62,7 @@ void FFTTester::test(){
 }
 
 bool FFTTester::polynomialsAreEqual(const Polynomial &p1, const Polynomial &p2){
-    for (int i=0; i<max(p1.size(), p2.size()); i++){
+    for (size_t i=0; i<max(p1.size(), p2.size()); i++){
         if (abs((i < p1.size() ? p1[i] : 0) - (i < p2.size() ? p2[i] : 0)) > 0.00001){
             cout << "Different ! " << p1[i] << " vs " << p2[i] << endl;
             return false;
@@ -87,14 +87,14 @@ Polynomial FFTTester::getFastProduct(const Polynomial &p1, const Polynomial &p2)
 }
 
 Polynomial FFTTester::getTrivialProduct(const Polynomial &p1, const Polynomial &p2){
-    int n = p1.size();
-    int m = p2.size();
+    size_t n = p1.size();
+    size_t m = p2.size();
 
     Polynomial p3((n-1)+(m-1)+1, 0);
 
-    for (int i=0; i<p3.size(); i++){
+    for (size_t i=0; i<p3.size(); i++){
         double val = 0;
-        for (int j=0; j<=i; j++){
+        for (size_t j=0; j<=i; j++){
             val += (j < n ? (p1[j]) : 0 ) * (((i-j) >= 0 && (i-j)<m) ? (p2[i-j]) : 0);
         }
         p3[i] = val;

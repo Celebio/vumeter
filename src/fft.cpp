@@ -1,5 +1,6 @@
 #include "fft.hpp"
 #include <iostream>
+#include <algorithm>
 
 using namespace std;
 
@@ -50,34 +51,41 @@ Complex FFT::computeOmega(int numberOfPoints){
     return exp(2i * pi / (double)numberOfPoints);
 }
 
-ComplexPolynomial FFT::fastEval(const ComplexPolynomial &a, int start, int step, Complex omega, int n){
-    ComplexPolynomial evaluated = {};
+void FFT::fastEvalWithBuffer(const ComplexPolynomial &a, size_t start, size_t step, Complex omega, size_t n, size_t outOffset, ComplexPolynomial &out, ComplexPolynomial &buffer){
     if (n == 1){
         Complex val;
         if (start < a.size()){
             val = a[start];
         }
-        evaluated.push_back(val);
-        return evaluated;
-    }
-    evaluated.resize(n);
-
-    ComplexPolynomial ae_eval = FFT::fastEval(a, start, step*2, pow(omega, 2), n/2);
-    ComplexPolynomial ao_eval = FFT::fastEval(a, start+step, step*2, pow(omega, 2), n/2);
-
-    for (int i=0; i<n/2; i++){
-        evaluated[i] = ae_eval[i] + pow(omega, i) * ao_eval[i];
-        evaluated[i+n/2] = ae_eval[i] - pow(omega, i) * ao_eval[i];
+        out[outOffset] = val;
+        return;
     }
 
-    return evaluated;
+    FFT::fastEvalWithBuffer(a, start, step*2, pow(omega, 2), n/2, outOffset, out, buffer);
+    FFT::fastEvalWithBuffer(a, start+step, step*2, pow(omega, 2), n/2, outOffset+n/2, out, buffer);
+
+    for (size_t i=0; i<n/2; i++){
+        buffer[i] = out[outOffset+i] + pow(omega, i) * out[outOffset+n/2+i];
+        buffer[i+n/2] = out[outOffset+i] - pow(omega, i) * out[outOffset+n/2+i];
+        // the same as :
+        //   buffer[i+n/2] = out[outOffset+i] - pow(omega, i+n/2) * out[outOffset+n/2+i];
+        // see : https://imgur.com/ZAPGXJ9
+    }
+    for (size_t i=0; i<n; i++){
+        out[outOffset+i] = buffer[i];
+    }
 }
 
 ComplexPolynomial FFT::eval(const ComplexPolynomial &coefs,
                             const Complex &omega,
                             int numberOfPoints){
-    return FFT::fastEval(coefs, 0, 1, omega, numberOfPoints);
+    ComplexPolynomial c(numberOfPoints);
+    ComplexPolynomial buffer(numberOfPoints);
 
+    FFT::fastEvalWithBuffer(coefs, 0, 1, omega, numberOfPoints, 0, c, buffer);
+    return c;
+
+    // return FFT::fastEvalWithAllocation(coefs, 0, 1, omega, numberOfPoints);
 }
 
 ComplexPolynomial FFT::eval(const ComplexPolynomial &coefs, int numberOfPoints){
@@ -107,20 +115,44 @@ ComplexPolynomial FFT::evalInverse(const ComplexPolynomial &coefs, int numberOfP
 
 // Use for debug :
 
-// ComplexPolynomial FFT::slowEval(const ComplexPolynomial &coefs,
-//                             const Complex &omega,
-//                             int numberOfPoints){
-//     ComplexPolynomial result(numberOfPoints, Complex(0.0, 0.0));
+ComplexPolynomial FFT::slowEval(const ComplexPolynomial &coefs,
+                            const Complex &omega,
+                            int numberOfPoints){
+    ComplexPolynomial result(numberOfPoints, Complex(0.0, 0.0));
 
-//     for (int i=0; i<result.size(); i++){
-//         for (int j=0; j<result.size() && j<coefs.size(); j++){
-//             result[i] += coefs[j] * pow(omega, i*j);
-//         }
-//     }
+    for (size_t i=0; i<result.size(); i++){
+        for (size_t j=0; j<result.size() && j<coefs.size(); j++){
+            result[i] += coefs[j] * pow(omega, i*j);
+        }
+    }
 
-//     return result;
-// }
+    return result;
+}
 
+ComplexPolynomial FFT::fastEvalWithAllocation(const ComplexPolynomial &coefs, size_t start, size_t step, Complex omega, size_t n){
+    ComplexPolynomial evaluated = {};
+    if (n == 1){
+        Complex val;
+        if (start < coefs.size()){
+            val = coefs[start];
+        }
+        evaluated.push_back(val);
+        return evaluated;
+    }
+    evaluated.resize(n);
 
+    ComplexPolynomial coefsEvenEval = FFT::fastEvalWithAllocation(coefs, start, step*2, pow(omega, 2), n/2);
+    ComplexPolynomial coefsOddEval = FFT::fastEvalWithAllocation(coefs, start+step, step*2, pow(omega, 2), n/2);
+
+    for (size_t i=0; i<n/2; i++){
+        evaluated[i] = coefsEvenEval[i] + pow(omega, i) * coefsOddEval[i];
+        evaluated[i+n/2] = coefsEvenEval[i] - pow(omega, i) * coefsOddEval[i];
+        // the same as :
+        //   evaluated[i+n/2] = coefsEvenEval[i] + pow(omega, (i+n/2)) * coefsOddEval[i];
+        // see : https://imgur.com/ZAPGXJ9
+    }
+
+    return evaluated;
+}
 
 
