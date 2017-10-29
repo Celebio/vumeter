@@ -1,5 +1,5 @@
-#ifndef DEVICE_LISTENER_HPP
-#define DEVICE_LISTENER_HPP
+#ifndef LISTENER_HPP
+#define LISTENER_HPP
 
 #include <portaudio.h>
 #include <vector>

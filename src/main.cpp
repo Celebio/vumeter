@@ -1,4 +1,5 @@
 #include "vumeter.hpp"
+#include "ffttester.hpp"
 #include <signal.h>
 #include <iostream>
 
@@ -8,7 +9,7 @@ void signalHandler(int s){
 }
 
 int main(int argc, char *argv[]){
-    // raise(SIGSTOP);
+    // raise(SIGSTOP);  // start the debugger
 
     struct sigaction sigIntHandler;
 
@@ -18,6 +19,8 @@ int main(int argc, char *argv[]){
     sigaction(SIGINT, &sigIntHandler, NULL);
 
     VuMeter().start();
+    // FFTTester().test();
+
 }
 
 

@@ -1,5 +1,5 @@
-#ifndef DEVICE_PORTAUDIO_STREAMER_HPP
-#define DEVICE_PORTAUDIO_STREAMER_HPP
+#ifndef PORTAUDIO_STREAMER_HPP
+#define PORTAUDIO_STREAMER_HPP
 
 #include <portaudio.h>
 #include <experimental/optional>

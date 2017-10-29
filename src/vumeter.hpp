@@ -1,5 +1,5 @@
-#ifndef DEVICE_VUMETER_HPP
-#define DEVICE_VUMETER_HPP
+#ifndef VUMETER_HPP
+#define VUMETER_HPP
 
 
 #include "rwqueuetype.hpp"

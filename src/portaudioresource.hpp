@@ -1,5 +1,5 @@
-#ifndef DEVICE_PORTAUDIO_RESOURCE_HPP
-#define DEVICE_PORTAUDIO_RESOURCE_HPP
+#ifndef PORTAUDIO_RESOURCE_HPP
+#define PORTAUDIO_RESOURCE_HPP
 
 
 // Singleton that takes care of C-style resource : Pa_Initialize Pa_Terminate

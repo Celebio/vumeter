@@ -1,5 +1,5 @@
-#ifndef DEVICE_DISPLAYER_HPP
-#define DEVICE_DISPLAYER_HPP
+#ifndef DISPLAYER_HPP
+#define DISPLAYER_HPP
 
 #include "rwqueuetype.hpp"
 #include <SDL.h>

@@ -1,5 +1,5 @@
-#ifndef DEVICE_SANITY_HPP
-#define DEVICE_SANITY_HPP
+#ifndef SANITY_HPP
+#define SANITY_HPP
 
 #include <portaudio.h>
 
