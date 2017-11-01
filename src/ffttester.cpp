@@ -7,6 +7,7 @@
 #include <random>
 #include <vector>
 #include <iomanip>
+#define _USE_MATH_DEFINES
 #include <cmath>
 #include <time.h>
 #include <stdlib.h>
@@ -45,6 +46,20 @@ void FFTTester::test(){
     std::setprecision(2);
 
     {
+        Polynomial sine = {};
+        const int sinTableSize = 256;
+
+        sine.resize(sinTableSize);
+        for(int i=0; i<sinTableSize; i++ )
+        {
+            sine[i] = (float) 0.2 * sin( ((double)i/(double)sinTableSize) * M_PI * 2. * 10. );
+        }
+
+        ComplexPolynomial sineEval = FFT(ComplexPolynomial(sine), sinTableSize).computeEval();
+        FFT::displayComplexPolynomialAbs(sineEval);
+    }
+
+    {
         Polynomial p1 = { 2.0, 5.6, 7.0, 6.3853, 9.0, 0, 3.0, 5.6, 2.6 };
         Polynomial p2 = { 5.9, 23.5, 6.283, 9.3, 12.4, 5.1, 1.1, 0.3, 0, 4.0 };
 
@@ -76,13 +91,13 @@ Polynomial FFTTester::getFastProduct(const Polynomial &p1, const Polynomial &p2)
     int m = p2.size();
     int k = (n-1)+(m-1)+1;
 
-    ComplexPolynomial c1Eval = FFT::eval(ComplexPolynomial(p1), k);
-    ComplexPolynomial c2Eval = FFT::eval(ComplexPolynomial(p2), k);
+    ComplexPolynomial c1Eval = FFT(ComplexPolynomial(p1), k).computeEval();
+    ComplexPolynomial c2Eval = FFT(ComplexPolynomial(p2), k).computeEval();
     ComplexPolynomial c3Eval = c1Eval * c2Eval;
 
-    ComplexPolynomial c3 = FFT::evalInverse(c3Eval, k);
+    ComplexPolynomial c3 = FFT(c3Eval, k).computeEvalInverse();
 
-    Polynomial res(FFT::evalInverse(c3Eval, k));
+    Polynomial res(c3);
     return res;
 }
 

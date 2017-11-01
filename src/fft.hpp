@@ -23,22 +23,29 @@ public:
     explicit Polynomial(const ComplexPolynomial &p);
 };
 
+
 class FFT {
 public:
-    static ComplexPolynomial eval(const ComplexPolynomial &p, int numberOfPoints);
-    static ComplexPolynomial evalInverse(const ComplexPolynomial &p, int numberOfPoints);
+    explicit FFT(const ComplexPolynomial &p, size_t numberOfPoints);
+    void setValue(size_t index, const Complex value);
+    const std::vector<double> &computeFrequentialAmplitudes();
+    ComplexPolynomial computeEval();
+    ComplexPolynomial computeEvalInverse();
+
     static void displayComplexPolynomial(const ComplexPolynomial &p);
+    static void displayComplexPolynomialAbs(const ComplexPolynomial &p);
 
 private:
-    static ComplexPolynomial eval(const ComplexPolynomial &coefs, const Complex &omega, int numberOfPoints);
-    static void fastEvalWithBuffer(const ComplexPolynomial &a, size_t start, size_t step, Complex omega, size_t n, size_t outOffset, ComplexPolynomial &out, ComplexPolynomial &buffer);
-    static int adjustedNumberOfPoints(int numberOfPoints);
-    static Complex computeOmega(int numberOfPoints);
+    size_t m_numberOfPoints;
+    Complex m_omega;
+    ComplexPolynomial m_coefs;
+    ComplexPolynomial m_buffer;
+    ComplexPolynomial m_evalResults;
+    std::vector<double> m_frequentialAmplitudes;
 
-    // for debug:
-    static ComplexPolynomial slowEval(const ComplexPolynomial &coefs, const Complex &omega, int numberOfPoints);
-    static ComplexPolynomial fastEvalWithAllocation(const ComplexPolynomial &a, size_t start, size_t step, Complex omega, size_t n);
+    void fastEvalWithBuffer(size_t start, size_t step, Complex omega, size_t n, size_t outOffset, ComplexPolynomial &out, ComplexPolynomial &buffer);
 };
+
 
 
 

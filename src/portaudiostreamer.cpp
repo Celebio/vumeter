@@ -21,3 +21,16 @@ PortAudioStreamer::PortAudioStreamer(const DeviceFinder &deviceFinder) :
     m_sampleRate(0),
     m_framesPerBuffer(0) {
 }
+
+PortAudioStreamer::PortAudioStreamer(const DeviceFinder &deviceFinder,
+                                     const std::experimental::optional<PaStreamParameters> &inputParameters,
+                                     const std::experimental::optional<PaStreamParameters> &outputParameters,
+                                     double sampleRate,
+                                     int framesPerBuffer) :
+    m_stream(nullptr),
+    m_inputParameters(inputParameters),
+    m_outputParameters(outputParameters),
+    m_sampleRate(sampleRate),
+    m_framesPerBuffer(framesPerBuffer) {
+}
+

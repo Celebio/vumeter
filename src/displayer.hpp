@@ -2,8 +2,10 @@
 #define DISPLAYER_HPP
 
 #include "rwqueuetype.hpp"
+
 #include <SDL.h>
 #include <memory>
+#include <vector>
 
 using SDLWindowDestroyerType = void (*)(SDL_Window*);
 using SDLRendererDestroyerType = void (*)(SDL_Renderer*);
@@ -23,17 +25,21 @@ private:
 
 class Displayer {
 public:
-    explicit Displayer(RWQueue *lockFreeQueue);
+    explicit Displayer(RWQueue *lockFreeQueue, RWVectorQueue *lockFreeVectorQueue);
     ~Displayer();
-    void readAndDisplay() const;
+    void readAndDisplay();
 private:
     Displayer(const Displayer &);
     RWQueue *m_lockFreeQueue;
+    RWVectorQueue *m_lockFreeVectorQueue;
     std::unique_ptr<SDLResource> m_sdlResource;
     std::unique_ptr<SDL_Window, SDLWindowDestroyerType> m_window;
     std::unique_ptr<SDL_Renderer, SDLRendererDestroyerType> m_renderer;
     std::unique_ptr<SDL_Texture, SDLTextureDestroyerType> m_texture;
-    double getLatestAverageFromQueue() const;
+    std::vector<double> m_lastFrequencyAmplitudes;
+    double m_level;
+    void fetchLatestAverageFromQueue();
+    void fetchLatestFrequencyAmplitudes();
 };
 
 #endif

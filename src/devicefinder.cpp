@@ -27,14 +27,14 @@ DeviceFinder::DeviceFinder() :
 
     for (const string &preferedInputDeviceName : preferedInputDevices){
         auto deviceIndex = findPreferedDevice(preferedInputDeviceName, false, true, false);
-        if (deviceIndex){
+        if (deviceIndex && !m_inputDeviceIndex){
             m_inputDeviceIndex = deviceIndex;
         }
     }
 
     for (const string &preferedOutputDeviceName : preferedOutputDevices){
         auto deviceIndex = findPreferedDevice(preferedOutputDeviceName, false, false, true);
-        if (deviceIndex){
+        if (deviceIndex && !m_outputDeviceIndex){
             m_outputDeviceIndex = deviceIndex;
         }
     }

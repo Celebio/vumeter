@@ -5,8 +5,21 @@
 using namespace std;
 
 
-bool isPowerOfTwo(int val){
+bool isPowerOfTwo(size_t val){
     return ((val & (val-1)) == 0);
+}
+
+size_t adjustedNumberOfPoints(size_t numberOfPoints){
+    while (!isPowerOfTwo(numberOfPoints)){
+        numberOfPoints++;
+    }
+    return numberOfPoints;
+}
+
+Complex computeOmega(size_t numberOfPoints){
+    static const double pi = std::acos(-1);
+
+    return exp(2i * pi / (double)numberOfPoints);
 }
 
 ComplexPolynomial::ComplexPolynomial(const Polynomial &p){
@@ -32,37 +45,88 @@ Polynomial::Polynomial(const ComplexPolynomial &p){
 }
 
 void FFT::displayComplexPolynomial(const ComplexPolynomial &p){
-    int i = 0;
+    int ctr = 0;
     for (const auto &v : p){
-        cout << "\t" << i++ << " \t: " << v.real() << " +  i * " << v.imag() << endl;
+        cout << "\t" << ctr++ << " \t: " << v.real() << " +  i * " << v.imag() << endl;
+    }
+}
+void FFT::displayComplexPolynomialAbs(const ComplexPolynomial &p){
+    int ctr = 0;
+    for (const auto &v : p){
+        cout << "\t" << ctr++ << " \t: " << abs(v) << endl;
     }
 }
 
-int FFT::adjustedNumberOfPoints(int numberOfPoints){
-    while (!isPowerOfTwo(numberOfPoints)){
-        numberOfPoints++;
-    }
-    return numberOfPoints;
+
+
+FFT::FFT(const ComplexPolynomial &p, size_t numberOfPoints) :
+    m_numberOfPoints(adjustedNumberOfPoints(numberOfPoints)),
+    m_omega(computeOmega(m_numberOfPoints)),
+    m_coefs(p),
+    m_buffer(ComplexPolynomial(m_numberOfPoints)),
+    m_evalResults(ComplexPolynomial(m_numberOfPoints)),
+    m_frequentialAmplitudes(m_numberOfPoints)
+{
+    m_coefs.resize(m_numberOfPoints, Complex(0, 0));
 }
 
-Complex FFT::computeOmega(int numberOfPoints){
-    static const double pi = std::acos(-1);
-
-    return exp(2i * pi / (double)numberOfPoints);
+void FFT::setValue(size_t index, const Complex value){
+    m_coefs[index] = value;
 }
 
-void FFT::fastEvalWithBuffer(const ComplexPolynomial &a, size_t start, size_t step, Complex omega, size_t n, size_t outOffset, ComplexPolynomial &out, ComplexPolynomial &buffer){
+const vector<double> &FFT::computeFrequentialAmplitudes() {
+    fastEvalWithBuffer(0,
+                       1,
+                       m_omega,
+                       m_numberOfPoints,
+                       0,
+                       m_evalResults,
+                       m_buffer);
+    transform(m_evalResults.begin(), m_evalResults.end(), m_frequentialAmplitudes.begin(), [this](const Complex &c){
+        return abs(c);
+    });
+
+    return m_frequentialAmplitudes;
+}
+
+ComplexPolynomial FFT::computeEval(){
+    fastEvalWithBuffer(0,
+                       1,
+                       m_omega,
+                       m_numberOfPoints,
+                       0,
+                       m_evalResults,
+                       m_buffer);
+    return m_evalResults;
+}
+ComplexPolynomial FFT::computeEvalInverse(){
+    fastEvalWithBuffer(0,
+                       1,
+                       pow(m_omega, -1),
+                       m_numberOfPoints,
+                       0,
+                       m_evalResults,
+                       m_buffer);
+    transform(m_evalResults.begin(), m_evalResults.end(), m_evalResults.begin(), [this](const Complex &c){
+        return c/((double)this->m_numberOfPoints);
+    });
+    return m_evalResults;
+}
+
+
+
+void FFT::fastEvalWithBuffer(size_t start, size_t step, Complex omega, size_t n, size_t outOffset, ComplexPolynomial &out, ComplexPolynomial &buffer){
     if (n == 1){
         Complex val;
-        if (start < a.size()){
-            val = a[start];
+        if (start < m_coefs.size()){
+            val = m_coefs[start];
         }
         out[outOffset] = val;
         return;
     }
 
-    FFT::fastEvalWithBuffer(a, start, step*2, pow(omega, 2), n/2, outOffset, out, buffer);
-    FFT::fastEvalWithBuffer(a, start+step, step*2, pow(omega, 2), n/2, outOffset+n/2, out, buffer);
+    fastEvalWithBuffer(start, step*2, pow(omega, 2), n/2, outOffset, out, buffer);
+    fastEvalWithBuffer(start+step, step*2, pow(omega, 2), n/2, outOffset+n/2, out, buffer);
 
     for (size_t i=0; i<n/2; i++){
         buffer[i] = out[outOffset+i] + pow(omega, i) * out[outOffset+n/2+i];
@@ -71,88 +135,9 @@ void FFT::fastEvalWithBuffer(const ComplexPolynomial &a, size_t start, size_t st
         //   buffer[i+n/2] = out[outOffset+i] - pow(omega, i+n/2) * out[outOffset+n/2+i];
         // see : https://imgur.com/ZAPGXJ9
     }
-    for (size_t i=0; i<n; i++){
-        out[outOffset+i] = buffer[i];
-    }
+
+    memcpy(&out[outOffset], &buffer[0], n*sizeof(Complex));
 }
 
-ComplexPolynomial FFT::eval(const ComplexPolynomial &coefs,
-                            const Complex &omega,
-                            int numberOfPoints){
-    ComplexPolynomial c(numberOfPoints);
-    ComplexPolynomial buffer(numberOfPoints);
-
-    FFT::fastEvalWithBuffer(coefs, 0, 1, omega, numberOfPoints, 0, c, buffer);
-    return c;
-
-    // return FFT::fastEvalWithAllocation(coefs, 0, 1, omega, numberOfPoints);
-}
-
-ComplexPolynomial FFT::eval(const ComplexPolynomial &coefs, int numberOfPoints){
-    numberOfPoints = FFT::adjustedNumberOfPoints(numberOfPoints);
-    const Complex omega = FFT::computeOmega(numberOfPoints);
-
-    // cout << "n = " << numberOfPoints << endl;
-    // cout << "omega = " << omega << endl;
-
-    return FFT::eval(coefs, omega, numberOfPoints);
-}
-
-ComplexPolynomial FFT::evalInverse(const ComplexPolynomial &coefs, int numberOfPoints){
-    numberOfPoints = FFT::adjustedNumberOfPoints(numberOfPoints);
-    const Complex omega = pow(FFT::computeOmega(numberOfPoints), -1);
-
-    // cout << "n = " << numberOfPoints << endl;
-    // cout << "omega = " << omega << endl;
-
-    ComplexPolynomial result = FFT::eval(coefs, omega, numberOfPoints);
-    transform(result.begin(), result.end(), result.begin(), [numberOfPoints](const Complex &c){
-        return c/((double)numberOfPoints);
-    });
-
-    return result;
-}
-
-// Use for debug :
-
-ComplexPolynomial FFT::slowEval(const ComplexPolynomial &coefs,
-                            const Complex &omega,
-                            int numberOfPoints){
-    ComplexPolynomial result(numberOfPoints, Complex(0.0, 0.0));
-
-    for (size_t i=0; i<result.size(); i++){
-        for (size_t j=0; j<result.size() && j<coefs.size(); j++){
-            result[i] += coefs[j] * pow(omega, i*j);
-        }
-    }
-
-    return result;
-}
-
-ComplexPolynomial FFT::fastEvalWithAllocation(const ComplexPolynomial &coefs, size_t start, size_t step, Complex omega, size_t n){
-    ComplexPolynomial evaluated = {};
-    if (n == 1){
-        Complex val;
-        if (start < coefs.size()){
-            val = coefs[start];
-        }
-        evaluated.push_back(val);
-        return evaluated;
-    }
-    evaluated.resize(n);
-
-    ComplexPolynomial coefsEvenEval = FFT::fastEvalWithAllocation(coefs, start, step*2, pow(omega, 2), n/2);
-    ComplexPolynomial coefsOddEval = FFT::fastEvalWithAllocation(coefs, start+step, step*2, pow(omega, 2), n/2);
-
-    for (size_t i=0; i<n/2; i++){
-        evaluated[i] = coefsEvenEval[i] + pow(omega, i) * coefsOddEval[i];
-        evaluated[i+n/2] = coefsEvenEval[i] - pow(omega, i) * coefsOddEval[i];
-        // the same as :
-        //   evaluated[i+n/2] = coefsEvenEval[i] + pow(omega, (i+n/2)) * coefsOddEval[i];
-        // see : https://imgur.com/ZAPGXJ9
-    }
-
-    return evaluated;
-}
 
 

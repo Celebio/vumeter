@@ -1,9 +1,11 @@
 #include "listener.hpp"
 #include "sanity.hpp"
 #include "portaudiostreamer.hpp"
+#include "fft.hpp"
 
 #include <iostream>
-#include <string.h>
+#include <iomanip>
+#include <string>
 #include <math.h>
 #include <chrono>
 #include <unistd.h>
@@ -15,13 +17,18 @@ using namespace std::chrono;
 using namespace std::experimental;
 
 
-const int FRAMES_PER_BUFFER = 256;
+const int FRAMES_PER_BUFFER = (1 << 9);
+// The callback is called every FRAMES_PER_BUFFER/SampleRate :
+// 512 samples / 16000 Hz = 32 ms.
 
 
 
 class InputStreamer : public PortAudioStreamer {
     RWQueue *m_lockFreeQueue;
+    RWVectorQueue *m_lockFreeVectorQueue;
     bool m_stereo;
+    FFT m_fft;
+    high_resolution_clock::time_point m_lastTime;
 
     int audioCallback(const void *inputBuffer, void *outputBuffer,
                       unsigned long framesPerBuffer,
@@ -43,22 +50,35 @@ class InputStreamer : public PortAudioStreamer {
             } else {
                 avg += (leftSq);
             }
+            m_fft.setValue(i, Complex(left, 0.0));
+            // m_fftTime[i] = Complex(left, 0.0);
         }
         m_lockFreeQueue->try_enqueue((int)(avg*10.0/framesPerBuffer));
+        m_lockFreeVectorQueue->try_enqueue(m_fft.computeFrequentialAmplitudes());
+
+        // high_resolution_clock::time_point t1 = high_resolution_clock::now();
+        // duration<double, std::milli> time_span = t1 - m_lastTime;
+        // m_lastTime = t1;
+        // cout << "Elapsed: " << time_span.count() << endl;
+        // cout << "current " << (double)timeInfo->currentTime/1.0 << endl;
 
         return paContinue;
     }
 public:
     explicit InputStreamer(const DeviceFinder &deviceFinder,
-                           RWQueue *lockFreeQueue) :
-        PortAudioStreamer(deviceFinder),
-        m_lockFreeQueue(lockFreeQueue)
-    {
-        m_inputParameters = deviceFinder.getInputStreamParameters();
-        m_sampleRate = 16000;
-        m_framesPerBuffer = FRAMES_PER_BUFFER;
-        m_stereo = (m_inputParameters->channelCount == 2);
-    }
+                           RWQueue *lockFreeQueue,
+                           RWVectorQueue *lockFreeVectorQueue) :
+        PortAudioStreamer(deviceFinder,
+                          deviceFinder.getInputStreamParameters(),
+                          nullopt,
+                          16000,
+                          FRAMES_PER_BUFFER),
+        m_lockFreeQueue(lockFreeQueue),
+        m_lockFreeVectorQueue(lockFreeVectorQueue),
+        m_stereo(m_inputParameters->channelCount == 2),
+        m_fft(ComplexPolynomial(m_framesPerBuffer), m_framesPerBuffer),
+        m_lastTime()
+    {}
 
     void waitForever(){
         Sanity::checkNoError(openStream());
@@ -165,10 +185,12 @@ public:
 
 
 Listener::Listener(RWQueue *lockFreeQueue,
+                   RWVectorQueue *lockFreeVectorQueue,
                    bool listDevices,
                    const vector< string > &preferedInputDevices,
                    const vector< string > &preferedOutputDevices) :
     m_lockFreeQueue(lockFreeQueue),
+    m_lockFreeVectorQueue(lockFreeVectorQueue),
     m_portAudioResource(PortAudioResource::getInstance()),
     m_deviceFinder(listDevices, preferedInputDevices, preferedOutputDevices)
 {
@@ -182,7 +204,7 @@ void Listener::playTwoSmallHighPitchSine(){
 }
 
 void Listener::reallyListen(){
-    InputStreamer(m_deviceFinder, m_lockFreeQueue).waitForever();
+    InputStreamer(m_deviceFinder, m_lockFreeQueue, m_lockFreeVectorQueue).waitForever();
 }
 
 void Listener::listenAndWrite(){

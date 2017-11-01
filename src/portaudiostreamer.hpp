@@ -58,6 +58,13 @@ protected:
                               unsigned long framesPerBuffer,
                               const PaStreamCallbackTimeInfo* timeInfo,
                               PaStreamCallbackFlags statusFlags) = 0;
+
+    explicit PortAudioStreamer(const DeviceFinder &deviceFinder,
+                               const std::experimental::optional<PaStreamParameters> &inputParameters,
+                               const std::experimental::optional<PaStreamParameters> &outputParameters,
+                               double sampleRate,
+                               int framesPerBuffer);
+
 public:
     explicit PortAudioStreamer(const DeviceFinder &deviceFinder);
 

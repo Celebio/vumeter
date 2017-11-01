@@ -19,6 +19,7 @@ class AudioInputCallbackContext;
 class Listener {
 public:
     explicit Listener(RWQueue *lockFreeQueue,
+                      RWVectorQueue *lockFreeVectorQueue,
                       bool listDevices,
                       const std::vector< std::string > &preferedInputDevices,
                       const std::vector< std::string > &preferedOutputDevices);
@@ -26,6 +27,7 @@ public:
     void listenAndWrite();
 private:
     RWQueue *m_lockFreeQueue;
+    RWVectorQueue *m_lockFreeVectorQueue;
     std::unique_ptr<PortAudioResource> m_portAudioResource;
     DeviceFinder m_deviceFinder;
     void playTwoSmallHighPitchSine();
